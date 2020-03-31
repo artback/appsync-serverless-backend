@@ -1,0 +1,66 @@
+﻿schema {
+  query: Query
+  mutation: Mutation
+}
+
+type Mutation {
+  deleteRating(recipe_id: String!): Rating
+  updateMenu(menu: [String!]!, year_week: String!): [String!]!
+  updateRating(rating: Int!, recipe_id: String!): Rating
+}
+
+type Query {
+  batchGetRatings(recipe_ids: [String]): [Rating]!
+  getMenu(year_week: String!): [Rating]
+  getRating(recipe_id: String!): Rating
+  batchGetRecipes(query: String, begin: Int, end: Int ): [Recipe]
+  batchGetRecipesWithRating(query: String): [RecipeWithRating]
+}
+type RecipeWithRating {
+    recipe: Recipe
+    rating: Rating
+}
+type Rating {
+  updated: String
+  value: Int!
+  recipe_id: String
+  weekday: String
+}
+type RecipeList{
+   submitted: Boolean
+   recipes: [RecipeByDay!]!
+}
+
+type RecipeByDay{
+   weekDay: String
+   servings: Int
+   recipe: Recipe
+}
+type Recipe {
+ uri: String
+ label: String
+ image: String
+ source: String
+ url: String
+ yield: Int
+ dietLabels: [String]
+ healthLabels: [String]
+ cautions: [String]
+ ingredientLines: [String]
+ ingredients: [String]
+ calories: Float
+ totalWeight: Float
+ totalTime: Float
+ totalNutritens: [Nutritents]
+ totalDialy: [Nutritents]
+}
+
+type Nutritents {
+  label: String
+  quantity: Float
+  unit: String
+}
+type ingredient {
+    text: String
+    weight: Float
+}

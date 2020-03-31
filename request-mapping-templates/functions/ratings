@@ -1,0 +1,17 @@
+
+#set($ids = [])
+#foreach( $id in $context.prev.result)
+    #set($map = {})
+    $util.qr($map.put("recipe_id", $util.dynamodb.toDynamoDB($id) ))
+    $util.qr($map.put("user_id", $util.dynamodb.toDynamoDB($context.stash.user_id) ))
+    $util.qr($ids.add($map))
+#end
+{
+    "version" : "2018-05-29",
+    "operation" : "BatchGetItem",
+    "tables" : {
+        "rating_table": {
+            "keys": $util.toJson($ids),
+        }
+    }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "food-lazy-serverless-appsync",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "package": "sam package --template-file template.yaml --output-template-file package.yml --s3-bucket lazy-food && sam deploy --template-file package.yml --stack-name lazy --region us-east-2 --capabilities CAPABILITY_NAMED_IAM\n"
+  },
+  "dependencies": {
+    "aws-sdk": "^2.176.0"
+  }
+}

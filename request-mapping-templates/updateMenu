@@ -1,0 +1,12 @@
+{
+    "version" : "2017-02-28",
+    "operation" : "UpdateItem",
+    "key" : {
+        "user_id" :  { "S" : $util.toJson($context.identity.sub) },
+        "year_week" :  { "S" : $util.toJson($context.arguments.year_week) }
+    },
+    "attributeValues": {
+        "value": $util.dynamodb.toDynamoDBJson($context.arguments.menu),
+        "updated": $util.dynamodb.toDynamoDBJson($util.time.nowISO8601())
+      }
+}

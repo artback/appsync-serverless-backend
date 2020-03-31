@@ -1,0 +1,8 @@
+#set($myResults = [])
+#foreach($item in $ctx.stash.recipes)
+    	#set($map = {})
+        $util.qr($map.put("recipe", $item))
+        $util.qr($map.put("updated", $ctx.stash.ratings.get($foreach.index))
+        #set($added = $myResults.add($map))
+#end
+$utils.toJson($myResults)

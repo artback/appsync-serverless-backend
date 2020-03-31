@@ -1,0 +1,8 @@
+#set($myResults = [])
+#foreach($item in $ctx.result.data.rating_table)
+    	#set($map = {})
+        $util.qr($map.put("value", $item.value))
+        $util.qr($map.put("updated", $item.updated))
+        #set($added = $myResults.add($map))
+#end
+$utils.toJson($myResults)

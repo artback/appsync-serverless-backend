@@ -1,0 +1,13 @@
+{
+	"version": "2018-05-29",
+	"method": "GET",
+	"params": {
+		"headers": {
+			"Content-Type": "application/json"
+		},
+
+	},
+	"resourcePath": "/search?app_id=7bcc7b18&app_key=${{ secrets.API_KEY }}&q=$ctx.args.query"
+}
+
+

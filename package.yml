@@ -1,0 +1,470 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Resources:
+  getRecipeFunction:
+    Type: AWS::AppSync::FunctionConfiguration
+    Properties:
+      ApiId:
+        Fn::GetAtt:
+        - AppSyncApi
+        - ApiId
+      Name: recipes
+      Description: Checks to see if the user is also the caller
+      DataSourceName:
+        Fn::GetAtt:
+        - AppSyncRecipeDataSource
+        - Name
+      FunctionVersion: '2018-05-29'
+      RequestMappingTemplateS3Location: s3://lazy-food/a8c4c34fab81edd6967642b72376d6f2
+      ResponseMappingTemplate: .response-mapping-templates/recipe
+  getRatingsFunction:
+    Type: AWS::AppSync::FunctionConfiguration
+    Properties:
+      ApiId:
+        Fn::GetAtt:
+        - AppSyncApi
+        - ApiId
+      Name: recipes
+      Description: Checks to see if the user is also the caller
+      DataSourceName:
+        Fn::GetAtt:
+        - AppSyncRecipeDataSource
+        - Name
+      FunctionVersion: '2018-05-29'
+      RequestMappingTemplateS3Location: s3://lazy-food/7918440c683ccf3104febdc4c96edaa3
+      ResponseMappingTemplate: .response-mapping-templates/ratings
+  PipeLineRecipeAndRatingResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: AppSyncSchema
+    Properties:
+      ApiId:
+        Fn::GetAtt:
+        - AppSyncApi
+        - ApiId
+      TypeName: Query
+      FieldName: batchGetRecipesWithRating
+      Kind: PIPELINE
+      PipelineConfig:
+        Functions:
+        - Fn::GetAtt:
+          - getRecipeFunction
+          - FunctionId
+        - Fn::GetAtt:
+          - getRatingsFunction
+          - FunctionId
+      RequestMappingTemplate: '$util.qr($ctx.stash.put("user_id", $ctx.identity.sub))
+
+        $util.qr($ctx.stash.put("query", $ctx.args.query))
+
+        {}
+
+        '
+      ResponseMappingTemplate: .response-mapping-templates/final
+  AppSyncRecipeDataSource:
+    Type: AWS::AppSync::DataSource
+    Properties:
+      ApiId:
+        Fn::GetAtt:
+        - AppSyncApi
+        - ApiId
+      Name: LazyDynamoRecipeDataSource
+      Type: HTTP
+      HttpConfig:
+        Endpoint: https://api.edamam.com
+  GetRecipeResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: AppSyncSchema
+    Properties:
+      ApiId:
+        Fn::GetAtt:
+        - AppSyncApi
+        - ApiId
+      TypeName: Query
+      FieldName: batchGetRecipes
+      DataSourceName:
+        Fn::GetAtt:
+        - AppSyncRecipeDataSource
+        - Name
+      RequestMappingTemplateS3Location: s3://lazy-food/fc1c78b1a1f868834fa482879aefd13a
+      ResponseMappingTemplateS3Location: s3://lazy-food/910c4bd30379f9a80c86b941f63ad0b1
+  GetRatingsResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: AppSyncSchema
+    Properties:
+      ApiId:
+        Fn::GetAtt:
+        - AppSyncApi
+        - ApiId
+      TypeName: Query
+      FieldName: batchGetRatings
+      DataSourceName:
+        Fn::GetAtt:
+        - AppSyncRatingDataSource
+        - Name
+      RequestMappingTemplateS3Location: s3://lazy-food/66686965593630add97bb4c91c33d8fb
+      ResponseMappingTemplate: $utils.toJson($context.result.data.rating_table)
+  UpdateRatingResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: AppSyncSchema
+    Properties:
+      ApiId:
+        Fn::GetAtt:
+        - AppSyncApi
+        - ApiId
+      TypeName: Mutation
+      FieldName: updateRating
+      DataSourceName:
+        Fn::GetAtt:
+        - AppSyncRatingDataSource
+        - Name
+      RequestMappingTemplateS3Location: s3://lazy-food/f8f026b6dd489cf69485f264c1508887
+      ResponseMappingTemplate: $utils.toJson($context.result)
+  AppSyncRatingDataSource:
+    Type: AWS::AppSync::DataSource
+    Properties:
+      ApiId:
+        Fn::GetAtt:
+        - AppSyncApi
+        - ApiId
+      Name: LazyDynamoRatingSource
+      Type: AMAZON_DYNAMODB
+      ServiceRoleArn:
+        Fn::GetAtt:
+        - RatingDynamoRole
+        - Arn
+      DynamoDBConfig:
+        AwsRegion:
+          Ref: AWS::Region
+        TableName:
+          Ref: RatingTable
+  RatingDynamoRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: RatingRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - appsync.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Policies:
+      - PolicyName: RatingDynamoPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - dynamodb:*
+            Resource:
+            - Fn::GetAtt:
+              - RatingTable
+              - Arn
+  RatingTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: rating_table
+      AttributeDefinitions:
+      - AttributeName: user_id
+        AttributeType: S
+      - AttributeName: recipe_id
+        AttributeType: S
+      KeySchema:
+      - AttributeName: user_id
+        KeyType: HASH
+      - AttributeName: recipe_id
+        KeyType: RANGE
+      ProvisionedThroughput:
+        ReadCapacityUnits: 2
+        WriteCapacityUnits: 2
+  MenuLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      Role:
+        Fn::GetAtt:
+        - MenuDynamoRole
+        - Arn
+      CodeUri: s3://lazy-food/dbf2287c378bc3c03b43221844c312eb
+      Handler: app.handler
+      Runtime: nodejs8.10
+      Environment:
+        Variables:
+          RatingTable:
+            Ref: RatingTable
+          MenuTable:
+            Ref: MenuTable
+  GetMenuResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: AppSyncSchema
+    Properties:
+      ApiId:
+        Fn::GetAtt:
+        - AppSyncApi
+        - ApiId
+      TypeName: Query
+      FieldName: getMenu
+      DataSourceName:
+        Fn::GetAtt:
+        - AppSyncMenuDataSource
+        - Name
+      RequestMappingTemplateS3Location: s3://lazy-food/866396a36cb0b28fe891826c6ff6220e
+      ResponseMappingTemplate: $utils.toJson($context.result)
+  UpdateMenuResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: AppSyncSchema
+    Properties:
+      ApiId:
+        Fn::GetAtt:
+        - AppSyncApi
+        - ApiId
+      TypeName: Mutation
+      FieldName: updateMenu
+      DataSourceName:
+        Fn::GetAtt:
+        - AppSyncRatingDataSource
+        - Name
+      RequestMappingTemplateS3Location: s3://lazy-food/70d4c344976331a380e8aaa61f794553
+      ResponseMappingTemplate: $utils.toJson($context.result)
+  AppSyncMenuDataSource:
+    Type: AWS::AppSync::DataSource
+    Properties:
+      ApiId:
+        Fn::GetAtt:
+        - AppSyncApi
+        - ApiId
+      Name: LazyMenuLambdaDataSource
+      Description: Menu Lambda AppSync Data Source
+      Type: AWS_LAMBDA
+      ServiceRoleArn:
+        Fn::GetAtt:
+        - MenuLambdaRole
+        - Arn
+      LambdaConfig:
+        LambdaFunctionArn:
+          Fn::GetAtt:
+          - MenuLambda
+          - Arn
+  MenuLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: MenuLambdaRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - appsync.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Policies:
+      - PolicyName: invoke_lambda_from_appsync
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - lambda:InvokeFunction
+            Resource:
+            - Fn::GetAtt:
+              - MenuLambda
+              - Arn
+  MenuTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: menu_table
+      AttributeDefinitions:
+      - AttributeName: user_id
+        AttributeType: S
+      - AttributeName: year_week
+        AttributeType: S
+      KeySchema:
+      - AttributeName: user_id
+        KeyType: HASH
+      - AttributeName: year_week
+        KeyType: RANGE
+      ProvisionedThroughput:
+        ReadCapacityUnits: 2
+        WriteCapacityUnits: 2
+  MenuDynamoRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: MenuDynamoRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Policies:
+      - PolicyName: MenuDynamoPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - dynamodb:Query
+            - dynamodb:BatchWriteItem
+            - dynamodb:GetItem
+            - dynamodb:DeleteItem
+            - dynamodb:PutItem
+            - dynamodb:Scan
+            - dynamodb:UpdateItem
+            Resource:
+            - Fn::GetAtt:
+              - RatingTable
+              - Arn
+            - Fn::GetAtt:
+              - MenuTable
+              - Arn
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: lazy_users_pool
+      AliasAttributes:
+      - phone_number
+      - email
+      - preferred_username
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: lazy_user_pool_client
+      UserPoolId:
+        Ref: CognitoUserPool
+  CognitoIdentityPool:
+    Type: AWS::Cognito::IdentityPool
+    Properties:
+      IdentityPoolName: lazy_user_identity_pool
+      AllowUnauthenticatedIdentities: false
+      CognitoIdentityProviders:
+      - ClientId:
+          Ref: CognitoUserPoolClient
+        ProviderName:
+          Fn::GetAtt:
+          - CognitoUserPool
+          - ProviderName
+  CognitoIdentityPoolRoles:
+    Type: AWS::Cognito::IdentityPoolRoleAttachment
+    Properties:
+      IdentityPoolId:
+        Ref: CognitoIdentityPool
+      Roles:
+        authenticated:
+          Fn::GetAtt:
+          - CognitoAuthRole
+          - Arn
+        unauthenticated:
+          Fn::GetAtt:
+          - CognitoUnauthRole
+          - Arn
+  CognitoAuthRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: appAuthRole
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Federated: cognito-identity.amazonaws.com
+          Action:
+          - sts:AssumeRoleWithWebIdentity
+          Condition:
+            StringEquals:
+              cognito-identity.amazonaws.com:aud:
+                Ref: CognitoIdentityPool
+            ForAnyValue:StringLike:
+              cognito-identity.amazonaws.com:amr: authenticated
+      Policies:
+      - PolicyName: CognitoAuthorizedPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - mobileanalytics:PutEvents
+            - cognito-sync:*
+            - cognito-identity:*
+            Resource: '*'
+          - Effect: Allow
+            Action:
+            - execute-api:Invoke
+            Resource: '*'
+  CognitoUnauthRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: appUnauthRole
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Federated: cognito-identity.amazonaws.com
+          Action:
+          - sts:AssumeRoleWithWebIdentity
+          Condition:
+            StringEquals:
+              cognito-identity.amazonaws.com:aud:
+                Ref: CognitoIdentityPool
+            ForAnyValue:StringLike:
+              cognito-identity.amazonaws.com:amr: unauthenticated
+      Policies:
+      - PolicyName: CognitoUnauthorizedPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - mobileanalytics:PutEvents
+            - cognito-sync:*
+            - cognito-identity:*
+            Resource: '*'
+  AppSyncApi:
+    Type: AWS::AppSync::GraphQLApi
+    Description: 'The lazy GraphQL API '
+    Properties:
+      AuthenticationType: AMAZON_COGNITO_USER_POOLS
+      Name: lazy-appsync
+      UserPoolConfig:
+        UserPoolId:
+          Ref: CognitoUserPool
+        AwsRegion:
+          Fn::Sub: ${AWS::Region}
+        DefaultAction: ALLOW
+  AppSyncSchema:
+    Type: AWS::AppSync::GraphQLSchema
+    Properties:
+      ApiId:
+        Fn::GetAtt:
+        - AppSyncApi
+        - ApiId
+      DefinitionS3Location: s3://lazy-food/7ef1ada6a1fe82641a66bbf13497a6b7
+Outputs:
+  cognitoUserPoolId:
+    Value:
+      Ref: CognitoUserPool
+  CognitoIdentityPool:
+    Value:
+      Ref: CognitoIdentityPool
+  CognitoUserPoolClient:
+    Value:
+      Ref: CognitoUserPoolClient
+  awsAppsyncGraphqlEndpoint:
+    Description: The GraphQl URL
+    Value:
+      Fn::GetAtt:
+      - AppSyncApi
+      - GraphQLUrl
+  awsAppsyncGraphqlID:
+    Description: The AppSync id
+    Value:
+      Fn::GetAtt:
+      - AppSyncApi
+      - ApiId

@@ -1,0 +1,9 @@
+{
+    "version": "2017-02-28",
+    "operation": "Invoke",
+    "payload": {
+        "field": "getMenu",
+         "user_id": $util.toJson($context.identity.sub),
+         "year_week":  $util.toJson($context.arguments.year_week)
+    }
+}
